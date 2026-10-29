@@ -3,6 +3,9 @@ import { cn } from '@/lib/utils';
 type EmptyTasksStateProps = {
     onCreateForToday: () => void;
     onScheduleForAnotherDay: () => void;
+    onImport: () => void;
+    /** URL of the .txt download of every task the user has. */
+    exportUrl: string;
 };
 
 /**
@@ -11,6 +14,8 @@ type EmptyTasksStateProps = {
 export default function EmptyTasksState({
     onCreateForToday,
     onScheduleForAnotherDay,
+    onImport,
+    exportUrl,
 }: EmptyTasksStateProps) {
     return (
         <section className="relative flex w-full flex-1 items-center justify-center py-10">
@@ -48,6 +53,23 @@ export default function EmptyTasksState({
                             Agendar para outro dia
                         </button>
                     </div>
+                    <p className="mt-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                        <button
+                            type="button"
+                            onClick={onImport}
+                            className="cursor-pointer font-medium text-neutral-700 underline-offset-4 hover:underline dark:text-neutral-200"
+                        >
+                            Importar de um arquivo
+                        </button>
+                        {' · '}
+                        <a
+                            href={exportUrl}
+                            download
+                            className="font-medium text-neutral-700 underline-offset-4 hover:underline dark:text-neutral-200"
+                        >
+                            Exportar tasks (.txt)
+                        </a>
+                    </p>
                 </div>
             </div>
         </section>

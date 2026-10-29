@@ -14,5 +14,8 @@ declare module '@inertiajs/core' {
             sidebarOpen: boolean;
             [key: string]: unknown;
         };
+        flashDataType: {
+            imported_tasks_count?: number;
+        };
     }
 }

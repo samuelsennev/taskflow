@@ -2,8 +2,11 @@ import { useState } from 'react';
 import { PlusIcon } from '@/components/icons';
 import CreateTaskDialog from '@/components/tasks/create-task-dialog';
 import EmptyTasksState from '@/components/tasks/empty-tasks-state';
+import ImportTasksDialog from '@/components/tasks/import-tasks-dialog';
+import TaskTransferButtons from '@/components/tasks/task-transfer-buttons';
 import TaskList from '@/components/tasks/task-list';
 import AppLayout from '@/layouts/app-layout';
+import { show as showExport } from '@/routes/tasks/export';
 import type { Task } from '@/types';
 
 type DashboardProps = {
@@ -14,6 +17,7 @@ type DashboardProps = {
 
 export default function Dashboard({ today, tasks }: DashboardProps) {
     const [dialogDueDate, setDialogDueDate] = useState<string | null>(null);
+    const [isImporting, setIsImporting] = useState(false);
 
     const completedCount = tasks.filter((task) => task.is_completed).length;
     const formattedToday = new Intl.DateTimeFormat('pt-BR', {
@@ -29,6 +33,8 @@ export default function Dashboard({ today, tasks }: DashboardProps) {
                 <EmptyTasksState
                     onCreateForToday={() => setDialogDueDate(today)}
                     onScheduleForAnotherDay={() => setDialogDueDate('')}
+                    onImport={() => setIsImporting(true)}
+                    exportUrl={showExport.url()}
                 />
             ) : (
                 <>
@@ -42,14 +48,20 @@ export default function Dashboard({ today, tasks }: DashboardProps) {
                                 {tasks.length} concluídas
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => setDialogDueDate(today)}
-                            className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-neutral-900 px-3 text-sm font-medium text-white shadow-sm transition-[background-color,scale] duration-150 hover:bg-neutral-800 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-                        >
-                            <PlusIcon />
-                            Nova task
-                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                            <TaskTransferButtons
+                                onImport={() => setIsImporting(true)}
+                                exportUrl={showExport.url()}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setDialogDueDate(today)}
+                                className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-neutral-900 px-3 text-sm font-medium text-white shadow-sm transition-[background-color,scale] duration-150 hover:bg-neutral-800 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                            >
+                                <PlusIcon />
+                                Nova task
+                            </button>
+                        </div>
                     </div>
                     <div className="mt-6">
                         <TaskList tasks={tasks} />
@@ -62,6 +74,10 @@ export default function Dashboard({ today, tasks }: DashboardProps) {
                 onClose={() => setDialogDueDate(null)}
                 defaultDueDate={dialogDueDate ?? today}
                 minimumDueDate={today}
+            />
+            <ImportTasksDialog
+                isOpen={isImporting}
+                onClose={() => setIsImporting(false)}
             />
         </AppLayout>
     );
