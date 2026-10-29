@@ -63,29 +63,55 @@ test('the webhook rejects requests without the secret token', function () {
     Http::assertNothingSent();
 });
 
-test('starting the bot with a valid link token connects the chat to the user', function () {
+test('starting the bot with a link token asks to confirm the account before connecting', function () {
     fakeTelegramApi();
-    $user = User::factory()->create();
+    $user = User::factory()->create(['name' => 'Ada', 'email' => 'ada@example.com']);
     Cache::put(TelegramUpdateHandler::linkCacheKey('link-token'), $user->id);
 
     postTelegramUpdate(telegramMessage(12345, '/start link-token'))->assertNoContent();
 
-    expect($user->fresh()->telegram_chat_id)->toBe(12345)
-        ->and(Cache::has(TelegramUpdateHandler::linkCacheKey('link-token')))->toBeFalse()
-        ->and(sentTelegramText('sendMessage'))->toContain('Sua conta está conectada');
+    expect($user->fresh()->telegram_chat_id)->toBeNull()
+        ->and(Cache::has(TelegramUpdateHandler::linkCacheKey('link-token')))->toBeTrue()
+        ->and(sentTelegramText('sendMessage'))->toContain('<b>Ada</b> (a**@example.com)');
 });
 
-test('connecting a chat moves it away from the account that had it before', function () {
+test('confirming the connection links the chat and uses up the token', function () {
     fakeTelegramApi();
-    $previousOwner = User::factory()->create(['telegram_chat_id' => 12345]);
     $user = User::factory()->create();
     Cache::put(TelegramUpdateHandler::linkCacheKey('link-token'), $user->id);
 
-    postTelegramUpdate(telegramMessage(12345, '/start link-token'));
+    postTelegramUpdate(telegramButtonPress(12345, 'link:link-token'))->assertNoContent();
 
-    expect($previousOwner->fresh()->telegram_chat_id)->toBeNull()
-        ->and($user->fresh()->telegram_chat_id)->toBe(12345);
+    expect($user->fresh()->telegram_chat_id)->toBe(12345)
+        ->and(Cache::has(TelegramUpdateHandler::linkCacheKey('link-token')))->toBeFalse()
+        ->and(sentTelegramText('editMessageText'))->toContain('Sua conta está conectada');
 });
+
+test('cancelling the connection leaves the chat unlinked', function () {
+    fakeTelegramApi();
+    $user = User::factory()->create();
+    Cache::put(TelegramUpdateHandler::linkCacheKey('link-token'), $user->id);
+
+    postTelegramUpdate(telegramButtonPress(12345, 'link-cancel'));
+
+    expect($user->fresh()->telegram_chat_id)->toBeNull()
+        ->and(sentTelegramText('editMessageText'))->toContain('Conexão cancelada');
+});
+
+test('a chat linked to another account is not moved to a new one', function (string $update) {
+    fakeTelegramApi();
+    $currentOwner = User::factory()->create(['telegram_chat_id' => 12345]);
+    $user = User::factory()->create();
+    Cache::put(TelegramUpdateHandler::linkCacheKey('link-token'), $user->id);
+
+    postTelegramUpdate($update === 'start'
+        ? telegramMessage(12345, '/start link-token')
+        : telegramButtonPress(12345, 'link:link-token'));
+
+    expect($currentOwner->fresh()->telegram_chat_id)->toBe(12345)
+        ->and($user->fresh()->telegram_chat_id)->toBeNull()
+        ->and(sentTelegramText($update === 'start' ? 'sendMessage' : 'editMessageText'))->toContain('já está conectado a outra conta');
+})->with(['start', 'confirm']);
 
 test('starting the bot with an unknown link token does not connect anything', function () {
     fakeTelegramApi();

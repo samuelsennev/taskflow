@@ -29,6 +29,10 @@ class TelegramUpdateHandler
 
     private const int LIST_LIMIT = 20;
 
+    private const string EXPIRED_LINK_TEXT = 'Este link expirou. Gere um novo no Taskflow clicando em <b>Conectar Telegram</b>.';
+
+    private const string CHAT_ALREADY_LINKED_TEXT = 'Este chat já está conectado a outra conta do Taskflow. Desconecte-o em <b>Meu perfil</b> nessa conta antes de conectar outra.';
+
     public function __construct(private TelegramClient $telegram) {}
 
     /**
@@ -126,6 +130,22 @@ class TelegramUpdateHandler
     {
         $chatId = (int) data_get($callbackQuery, 'message.chat.id');
         $messageId = (int) data_get($callbackQuery, 'message.message_id');
+
+        [$action, $value, $scope] = array_pad(explode(':', (string) ($callbackQuery['data'] ?? ''), 3), 3, null);
+
+        if ($action === 'link') {
+            $this->confirmConnection($chatId, $callbackQuery['id'], (string) $value, $messageId);
+
+            return;
+        }
+
+        if ($action === 'link-cancel') {
+            $this->telegram->answerCallbackQuery($callbackQuery['id']);
+            $this->telegram->editMessageText($chatId, $messageId, 'Conexão cancelada. Nenhuma conta foi ligada a este chat.');
+
+            return;
+        }
+
         $user = User::firstWhere('telegram_chat_id', $chatId);
 
         if ($user === null) {
@@ -133,8 +153,6 @@ class TelegramUpdateHandler
 
             return;
         }
-
-        [$action, $value, $scope] = array_pad(explode(':', (string) ($callbackQuery['data'] ?? ''), 3), 3, null);
 
         match ($action) {
             'done' => $this->completeTask($user, $callbackQuery['id'], (int) $value, $scope ?? 'pending', $messageId),
@@ -158,21 +176,80 @@ class TelegramUpdateHandler
         return [null, $text];
     }
 
+    /**
+     * Ask the chat to confirm which account it is about to be linked to.
+     *
+     * Link tokens can be forwarded, so linking without confirmation would let someone tie
+     * another person's chat to their own account.
+     */
     private function connect(int $chatId, string $token): void
     {
-        $userId = Cache::pull(self::linkCacheKey($token));
-        $user = is_int($userId) ? User::find($userId) : null;
+        $user = $this->linkTokenUser(Cache::get(self::linkCacheKey($token)));
 
         if ($user === null) {
-            $this->telegram->sendMessage($chatId, 'Este link expirou. Gere um novo no Taskflow clicando em <b>Conectar Telegram</b>.');
+            $this->telegram->sendMessage($chatId, self::EXPIRED_LINK_TEXT);
 
             return;
         }
 
-        User::where('telegram_chat_id', $chatId)->whereKeyNot($user->id)->update(['telegram_chat_id' => null]);
+        if ($this->chatBelongsToAnotherUser($chatId, $user)) {
+            $this->telegram->sendMessage($chatId, self::CHAT_ALREADY_LINKED_TEXT);
+
+            return;
+        }
+
+        $this->telegram->sendMessage(
+            $chatId,
+            'Conectar este chat à conta <b>'.e($user->name).'</b> ('.e($this->maskEmail($user->email)).")?\n\nSó confirme se essa conta é sua.",
+            [[
+                ['text' => '✅ Conectar', 'callback_data' => "link:{$token}"],
+                ['text' => 'Cancelar', 'callback_data' => 'link-cancel'],
+            ]],
+        );
+    }
+
+    private function confirmConnection(int $chatId, string $callbackQueryId, string $token, int $messageId): void
+    {
+        $user = $this->linkTokenUser(Cache::pull(self::linkCacheKey($token)));
+
+        if ($user === null) {
+            $this->telegram->answerCallbackQuery($callbackQueryId);
+            $this->telegram->editMessageText($chatId, $messageId, self::EXPIRED_LINK_TEXT);
+
+            return;
+        }
+
+        if ($this->chatBelongsToAnotherUser($chatId, $user)) {
+            $this->telegram->answerCallbackQuery($callbackQueryId);
+            $this->telegram->editMessageText($chatId, $messageId, self::CHAT_ALREADY_LINKED_TEXT);
+
+            return;
+        }
+
         $user->forceFill(['telegram_chat_id' => $chatId])->save();
 
-        $this->telegram->sendMessage($chatId, 'Pronto, '.e($user->name)."! Sua conta está conectada.\n\n".$this->helpText());
+        $this->telegram->answerCallbackQuery($callbackQueryId, 'Conectado! ✅');
+        $this->telegram->editMessageText($chatId, $messageId, 'Pronto, '.e($user->name)."! Sua conta está conectada.\n\n".$this->helpText());
+    }
+
+    private function linkTokenUser(mixed $userId): ?User
+    {
+        return is_int($userId) ? User::find($userId) : null;
+    }
+
+    private function chatBelongsToAnotherUser(int $chatId, User $user): bool
+    {
+        return User::where('telegram_chat_id', $chatId)->whereKeyNot($user->id)->exists();
+    }
+
+    /**
+     * Hide most of the email's local part, e.g. "ada@example.com" becomes "a**@example.com".
+     */
+    private function maskEmail(string $email): string
+    {
+        [$localPart, $domain] = array_pad(explode('@', $email, 2), 2, '');
+
+        return Str::substr($localPart, 0, 1).str_repeat('*', max(Str::length($localPart) - 1, 2)).'@'.$domain;
     }
 
     private function sendTaskList(User $user, string $scope): void
