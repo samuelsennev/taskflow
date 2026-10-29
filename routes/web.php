@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\GitHubController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\McpConnectionController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\Settings\ConnectorController;
@@ -44,4 +45,6 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/telegram/connection', [TelegramConnectionController::class, 'store'])->name('telegram.connection.store');
     Route::delete('/telegram/connection', [TelegramConnectionController::class, 'destroy'])->name('telegram.connection.destroy');
+
+    Route::delete('/mcp/connection', [McpConnectionController::class, 'destroy'])->name('mcp.connection.destroy');
 });

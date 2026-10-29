@@ -14,6 +14,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Laravel\Passport\Contracts\OAuthenticatable;
 use Laravel\Passport\HasApiTokens;
+use Laravel\Passport\Token;
 
 /**
  * @property int $id
@@ -54,6 +55,25 @@ class User extends Authenticatable implements OAuthenticatable
     public function hasTelegramConnected(): bool
     {
         return $this->telegram_chat_id !== null;
+    }
+
+    /**
+     * Determine if an MCP client (e.g. Claude) holds a live OAuth token for the account.
+     */
+    public function hasMcpClientConnected(): bool
+    {
+        return $this->tokens()->where('revoked', false)->where('expires_at', '>', now())->exists();
+    }
+
+    /**
+     * Revoke every OAuth token issued to the account, cutting off all MCP clients.
+     */
+    public function revokeMcpAccess(): void
+    {
+        $this->tokens()->with('refreshToken')->where('revoked', false)->each(function (Token $token): void {
+            $token->revoke();
+            $token->refreshToken?->revoke();
+        });
     }
 
     /**
