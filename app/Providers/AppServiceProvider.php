@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Mcp\Server\Registrar;
 use Laravel\Passport\Passport;
 
 class AppServiceProvider extends ServiceProvider
@@ -36,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configurePassport(): void
     {
+        Passport::tokensCan([Registrar::OAUTH_SCOPE => 'Acessar suas tasks e projetos']);
         Passport::authorizationView(fn (array $parameters): Response => response()->view('mcp.authorize', $parameters));
     }
 
