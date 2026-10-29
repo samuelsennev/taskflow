@@ -4,10 +4,12 @@ namespace App\Providers;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\DevCommands;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Passport\Passport;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,6 +28,15 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureDevCommands();
+        $this->configurePassport();
+    }
+
+    /**
+     * Show MCP clients (e.g. Claude) the consent screen when they ask to access an account.
+     */
+    protected function configurePassport(): void
+    {
+        Passport::authorizationView(fn (array $parameters): Response => response()->view('mcp.authorize', $parameters));
     }
 
     /**
