@@ -72,7 +72,7 @@ class ImportTasksRequest extends FormRequest
                     return;
                 }
 
-                $this->parsedTasks = $parser->parse($contents);
+                $this->parsedTasks = $parser->parse($contents, limit: self::MAX_TASKS + 1);
 
                 if ($this->parsedTasks === []) {
                     $validator->errors()->add('file', 'Nenhuma task encontrada no arquivo.');

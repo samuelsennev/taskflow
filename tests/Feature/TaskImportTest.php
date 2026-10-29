@@ -112,6 +112,19 @@ test('users cannot import tasks into another user\'s project', function () {
     expect(Task::count())->toBe(0);
 });
 
+test('imported descriptions are cut at 2000 characters', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('tasks.import.store'), ['file' => taskFile("- Longa\n".str_repeat('    '.str_repeat('a', 99)."\n", 50))])
+        ->assertSessionHasNoErrors();
+
+    $description = $user->tasks()->sole()->description;
+
+    expect(mb_strlen($description))->toBe(2000)
+        ->and($description)->toStartWith(str_repeat('a', 99)."\n".str_repeat('a', 99));
+});
+
 test('legacy windows-1252 files are imported as utf-8', function () {
     $user = User::factory()->create();
 

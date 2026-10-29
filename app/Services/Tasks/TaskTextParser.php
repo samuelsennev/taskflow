@@ -19,11 +19,11 @@ class TaskTextParser
     private const int DESCRIPTION_LIMIT = 2000;
 
     /**
-     * Parse the given file contents into a list of tasks.
+     * Parse the given file contents into a list of tasks, stopping once `$limit` tasks have been read.
      *
      * @return list<array{title: string, description: string|null, due_date: Carbon, is_completed: bool, heading: string|null}>
      */
-    public function parse(string $contents): array
+    public function parse(string $contents, ?int $limit = null): array
     {
         $tasks = [];
         $heading = null;
@@ -38,11 +38,17 @@ class TaskTextParser
             }
 
             if ($current !== null && preg_match('/^[ \t]/', $line)) {
-                $current['description_lines'] = [
-                    ...$current['description_lines'],
-                    ...($current['description_lines'] === [] ? [] : array_fill(0, $pendingBlankLines, '')),
-                    rtrim(preg_replace('/^(\t| {1,4})/', '', $line)),
-                ];
+                if ($current['description_length'] <= self::DESCRIPTION_LIMIT) {
+                    if ($current['description_lines'] !== []) {
+                        array_push($current['description_lines'], ...array_fill(0, min($pendingBlankLines, self::DESCRIPTION_LIMIT), ''));
+                        $current['description_length'] += $pendingBlankLines;
+                    }
+
+                    $descriptionLine = rtrim(preg_replace('/^(\t| {1,4})/', '', $line));
+                    $current['description_lines'][] = $descriptionLine;
+                    $current['description_length'] += mb_strlen($descriptionLine) + 1;
+                }
+
                 $pendingBlankLines = 0;
 
                 continue;
@@ -50,10 +56,15 @@ class TaskTextParser
 
             $pendingBlankLines = 0;
 
-            if ($current !== null) {
-                $tasks[] = $this->finish($current);
-                $current = null;
+            if ($current !== null && ($finished = $this->finish($current)) !== null) {
+                $tasks[] = $finished;
+
+                if ($limit !== null && count($tasks) >= $limit) {
+                    return $tasks;
+                }
             }
+
+            $current = null;
 
             if (preg_match('/^\s*#{1,6}\s+(.+)$/u', $line, $matches)) {
                 $heading = trim($matches[1]);
@@ -64,11 +75,11 @@ class TaskTextParser
             $current = $this->parseTaskLine(trim($line), $heading);
         }
 
-        if ($current !== null) {
-            $tasks[] = $this->finish($current);
+        if ($current !== null && ($finished = $this->finish($current)) !== null) {
+            $tasks[] = $finished;
         }
 
-        return array_values(array_filter($tasks, fn (array $task): bool => $task['title'] !== ''));
+        return $tasks;
     }
 
     /**
@@ -82,7 +93,7 @@ class TaskTextParser
     /**
      * Read the title, completion and due date out of a single task line.
      *
-     * @return array{title: string, description_lines: list<string>, due_date: Carbon, is_completed: bool, heading: string|null}
+     * @return array{title: string, description_lines: list<string>, description_length: int, due_date: Carbon, is_completed: bool, heading: string|null}
      */
     private function parseTaskLine(string $line, ?string $heading): array
     {
@@ -117,6 +128,7 @@ class TaskTextParser
         return [
             'title' => mb_substr($title, 0, self::TITLE_LIMIT),
             'description_lines' => [],
+            'description_length' => 0,
             'due_date' => $dueDate ?? Carbon::today(),
             'is_completed' => $isCompleted,
             'heading' => $heading,
@@ -124,13 +136,17 @@ class TaskTextParser
     }
 
     /**
-     * Collapse the collected description lines into the final task shape.
+     * Collapse the collected description lines into the final task shape, or null when the line had no title.
      *
-     * @param  array{title: string, description_lines: list<string>, due_date: Carbon, is_completed: bool, heading: string|null}  $task
-     * @return array{title: string, description: string|null, due_date: Carbon, is_completed: bool, heading: string|null}
+     * @param  array{title: string, description_lines: list<string>, description_length: int, due_date: Carbon, is_completed: bool, heading: string|null}  $task
+     * @return array{title: string, description: string|null, due_date: Carbon, is_completed: bool, heading: string|null}|null
      */
-    private function finish(array $task): array
+    private function finish(array $task): ?array
     {
+        if ($task['title'] === '') {
+            return null;
+        }
+
         $description = trim(implode("\n", $task['description_lines']));
 
         return [
