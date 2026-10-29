@@ -18,6 +18,20 @@ test('the mcp endpoint requires an oauth token', function () {
         ->assertHeader('WWW-Authenticate');
 });
 
+test('oauth clients can only register redirects to trusted domains', function (string $redirectUri, bool $isAllowed) {
+    $response = $this->postJson(route('mcp.oauth.register'), [
+        'client_name' => 'Claude',
+        'redirect_uris' => [$redirectUri],
+    ]);
+
+    $isAllowed ? $response->assertSuccessful() : $response->assertStatus(400);
+})->with([
+    'claude.ai' => ['https://claude.ai/api/mcp/auth_callback', true],
+    'localhost' => ['http://localhost:6274/oauth/callback', true],
+    'another site' => ['https://evil.example/callback', false],
+    'a look-alike host' => ['https://claude.ai.evil.example/callback', false],
+]);
+
 test('listing tasks filters by scope and only shows the user\'s tasks', function (string $scope, array $expectedTitles, array $hiddenTitles) {
     $user = User::factory()->create();
     Task::factory()->for($user)->create(['title' => 'Due today']);
