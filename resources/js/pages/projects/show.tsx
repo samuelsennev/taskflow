@@ -2,9 +2,12 @@ import { Link } from '@inertiajs/react';
 import { useState } from 'react';
 import { PlusIcon, SettingsIcon } from '@/components/icons';
 import CreateTaskDialog from '@/components/tasks/create-task-dialog';
+import ImportTasksDialog from '@/components/tasks/import-tasks-dialog';
+import TaskTransferButtons from '@/components/tasks/task-transfer-buttons';
 import TaskList from '@/components/tasks/task-list';
 import AppLayout from '@/layouts/app-layout';
 import { edit, index } from '@/routes/projects';
+import { show as showExport } from '@/routes/projects/tasks/export';
 import type { Project, Task } from '@/types';
 
 type ProjectShowProps = {
@@ -20,6 +23,7 @@ export default function ProjectShow({
     tasks,
 }: ProjectShowProps) {
     const [isCreatingTask, setIsCreatingTask] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
 
     const completedCount = tasks.filter((task) => task.is_completed).length;
 
@@ -37,6 +41,10 @@ export default function ProjectShow({
                     <h1 className="mr-auto min-w-0 pr-2 text-2xl font-semibold tracking-tight break-words text-neutral-900 dark:text-white">
                         {project.name}
                     </h1>
+                    <TaskTransferButtons
+                        onImport={() => setIsImporting(true)}
+                        exportUrl={showExport.url(project.id)}
+                    />
                     <Link
                         href={edit(project.id)}
                         aria-label="Configurações do projeto"
@@ -86,6 +94,11 @@ export default function ProjectShow({
                 onClose={() => setIsCreatingTask(false)}
                 defaultDueDate={today}
                 minimumDueDate={today}
+                projectId={project.id}
+            />
+            <ImportTasksDialog
+                isOpen={isImporting}
+                onClose={() => setIsImporting(false)}
                 projectId={project.id}
             />
         </AppLayout>

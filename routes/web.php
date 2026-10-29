@@ -8,6 +8,8 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\Settings\ConnectorController;
 use App\Http\Controllers\TaskCompletionController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\TaskExportController;
+use App\Http\Controllers\TaskImportController;
 use App\Http\Controllers\TelegramConnectionController;
 use App\Http\Controllers\TelegramWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -30,8 +32,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/projects/{project}/configuracoes', [ProjectController::class, 'edit'])->name('projects.edit')->can('update', 'project');
     Route::put('/projects/{project}', [ProjectController::class, 'update'])->name('projects.update')->can('update', 'project');
     Route::delete('/projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy')->can('delete', 'project');
+    Route::get('/projects/{project}/tasks/export', [TaskExportController::class, 'show'])->name('projects.tasks.export.show')->can('view', 'project');
+    Route::post('/projects/{project}/tasks/import', [TaskImportController::class, 'store'])->name('projects.tasks.import.store')->can('update', 'project');
 
     Route::post('/tasks', [TaskController::class, 'store'])->name('tasks.store');
+    Route::get('/tasks/export', [TaskExportController::class, 'show'])->name('tasks.export.show');
+    Route::post('/tasks/import', [TaskImportController::class, 'store'])->name('tasks.import.store');
     Route::put('/tasks/{task}', [TaskController::class, 'update'])->name('tasks.update')->can('update', 'task');
     Route::delete('/tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy')->can('delete', 'task');
 
