@@ -1,7 +1,14 @@
 import { Link } from '@inertiajs/react';
-import { TelegramIcon } from '@/components/icons';
+import { useRef, useState } from 'react';
+import {
+    CheckIcon,
+    ClaudeLogo,
+    CopyIcon,
+    TelegramLogo,
+} from '@/components/icons';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
+import mcpConnection from '@/routes/mcp/connection';
 import settings from '@/routes/settings';
 import telegramConnection from '@/routes/telegram/connection';
 
@@ -10,9 +17,132 @@ type ConnectorsProps = {
         is_available: boolean;
         is_connected: boolean;
     };
+    mcp: {
+        server_url: string;
+        is_connected: boolean;
+    };
 };
 
-export default function Connectors({ telegram }: ConnectorsProps) {
+const secondaryButtonClassName =
+    'shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-600 ring-1 ring-black/10 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-300 dark:ring-white/10 dark:hover:bg-neutral-800 dark:hover:text-white';
+
+const primaryButtonClassName =
+    'shrink-0 rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-[background-color,scale] duration-150 hover:bg-neutral-800 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
+
+function ConnectionStatus({ isConnected }: { isConnected: boolean }) {
+    return (
+        <>
+            <span
+                className={cn(
+                    'size-1.5 rounded-full',
+                    isConnected
+                        ? 'bg-emerald-500'
+                        : 'bg-neutral-300 dark:bg-neutral-600',
+                )}
+            />
+            <span className="text-xs font-normal whitespace-nowrap text-neutral-500 dark:text-neutral-400">
+                {isConnected ? 'Conectado' : 'Não conectado'}
+            </span>
+        </>
+    );
+}
+
+/**
+ * Prompt the user sends to Claude to get walked through adding the Taskflow MCP connector.
+ */
+function connectionPrompt(serverUrl: string): string {
+    return `Quero conectar o Taskflow a você. Me guie, passo a passo, para adicionar um conector personalizado em Configurações → Conectores usando esta URL de servidor MCP: ${serverUrl}. Depois de adicionar, vou entrar no Taskflow e aprovar o acesso.`;
+}
+
+function CopyablePrompt({ prompt }: { prompt: string }) {
+    const [isCopied, setIsCopied] = useState(false);
+    const promptRef = useRef<HTMLParagraphElement>(null);
+
+    const copy = async () => {
+        try {
+            await navigator.clipboard.writeText(prompt);
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        } catch {
+            if (promptRef.current) {
+                window.getSelection()?.selectAllChildren(promptRef.current);
+            }
+        }
+    };
+
+    return (
+        <div className="rounded-lg bg-white p-3 ring-1 ring-black/10 dark:bg-neutral-950 dark:ring-white/10">
+            <p
+                ref={promptRef}
+                className="text-sm break-words text-neutral-700 dark:text-neutral-300"
+            >
+                {prompt}
+            </p>
+            <div className="mt-2 flex justify-end">
+                <button
+                    type="button"
+                    onClick={copy}
+                    className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
+                >
+                    {isCopied ? (
+                        <CheckIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                        <CopyIcon className="size-3.5" />
+                    )}
+                    {isCopied ? 'Copiado' : 'Copiar prompt'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function ClaudeConnector({ mcp }: { mcp: ConnectorsProps['mcp'] }) {
+    return (
+        <li className="p-5">
+            <div className="flex items-center gap-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#F4F3EE] ring-1 ring-black/5 dark:bg-[#F4F3EE]/10 dark:ring-white/10">
+                    <ClaudeLogo className="size-6" />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-2 text-sm font-medium text-neutral-900 dark:text-white">
+                        Claude
+                        <span className="rounded-md bg-violet-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-violet-700 ring-1 ring-violet-600/15 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/20">
+                            MCP
+                        </span>
+                        <ConnectionStatus isConnected={mcp.is_connected} />
+                    </p>
+                    <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+                        Peça ao Claude para ver, criar e concluir suas tasks.
+                    </p>
+                </div>
+                {mcp.is_connected && (
+                    <Link
+                        href={mcpConnection.destroy()}
+                        as="button"
+                        className={secondaryButtonClassName}
+                    >
+                        Desconectar
+                    </Link>
+                )}
+            </div>
+
+            {!mcp.is_connected && (
+                <div className="mt-4 rounded-lg bg-neutral-50 p-4 sm:ml-14 dark:bg-white/5">
+                    <p className="text-sm text-neutral-600 dark:text-neutral-300">
+                        Envie este prompt ao Claude para conectar:
+                    </p>
+                    <div className="mt-3">
+                        <CopyablePrompt
+                            prompt={connectionPrompt(mcp.server_url)}
+                        />
+                    </div>
+                </div>
+            )}
+        </li>
+    );
+}
+
+export default function Connectors({ telegram, mcp }: ConnectorsProps) {
     return (
         <AppLayout title="Conectores">
             <div>
@@ -39,25 +169,13 @@ export default function Connectors({ telegram }: ConnectorsProps) {
 
                 <ul className="mt-4 divide-y divide-black/6 rounded-xl bg-white shadow-sm ring-1 shadow-black/5 ring-black/6 dark:divide-white/10 dark:bg-neutral-900 dark:ring-white/10">
                     <li className="flex items-center gap-4 p-5">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-sky-600/10 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-400/20">
-                            <TelegramIcon className="size-5" />
-                        </div>
+                        <TelegramLogo className="size-10 shrink-0" />
                         <div className="min-w-0 flex-1">
                             <p className="flex items-center gap-2 text-sm font-medium text-neutral-900 dark:text-white">
                                 Telegram
-                                <span
-                                    className={cn(
-                                        'size-1.5 rounded-full',
-                                        telegram.is_connected
-                                            ? 'bg-emerald-500'
-                                            : 'bg-neutral-300 dark:bg-neutral-600',
-                                    )}
+                                <ConnectionStatus
+                                    isConnected={telegram.is_connected}
                                 />
-                                <span className="text-xs font-normal text-neutral-500 dark:text-neutral-400">
-                                    {telegram.is_connected
-                                        ? 'Conectado'
-                                        : 'Não conectado'}
-                                </span>
                             </p>
                             <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
                                 {telegram.is_available
@@ -69,7 +187,7 @@ export default function Connectors({ telegram }: ConnectorsProps) {
                             <Link
                                 href={telegramConnection.destroy()}
                                 as="button"
-                                className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-600 ring-1 ring-black/10 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-300 dark:ring-white/10 dark:hover:bg-neutral-800 dark:hover:text-white"
+                                className={secondaryButtonClassName}
                             >
                                 Desconectar
                             </Link>
@@ -78,12 +196,13 @@ export default function Connectors({ telegram }: ConnectorsProps) {
                                 href={telegramConnection.store()}
                                 as="button"
                                 disabled={!telegram.is_available}
-                                className="shrink-0 rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-[background-color,scale] duration-150 hover:bg-neutral-800 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                                className={primaryButtonClassName}
                             >
                                 Conectar
                             </Link>
                         )}
                     </li>
+                    <ClaudeConnector mcp={mcp} />
                 </ul>
             </section>
         </AppLayout>

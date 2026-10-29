@@ -12,6 +12,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Laravel\Passport\Contracts\OAuthenticatable;
+use Laravel\Passport\HasApiTokens;
+use Laravel\Passport\Token;
 
 /**
  * @property int $id
@@ -27,10 +30,10 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable(['name', 'email', 'github_id', 'password'])]
 #[Hidden(['password', 'remember_token', 'telegram_chat_id'])]
-class User extends Authenticatable
+class User extends Authenticatable implements OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * Get the attributes that should be cast.
@@ -52,6 +55,25 @@ class User extends Authenticatable
     public function hasTelegramConnected(): bool
     {
         return $this->telegram_chat_id !== null;
+    }
+
+    /**
+     * Determine if an MCP client (e.g. Claude) holds a live OAuth token for the account.
+     */
+    public function hasMcpClientConnected(): bool
+    {
+        return $this->tokens()->where('revoked', false)->where('expires_at', '>', now())->exists();
+    }
+
+    /**
+     * Revoke every OAuth token issued to the account, cutting off all MCP clients.
+     */
+    public function revokeMcpAccess(): void
+    {
+        $this->tokens()->with('refreshToken')->where('revoked', false)->each(function (Token $token): void {
+            $token->revoke();
+            $token->refreshToken?->revoke();
+        });
     }
 
     /**

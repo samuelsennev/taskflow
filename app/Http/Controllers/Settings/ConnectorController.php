@@ -19,6 +19,10 @@ class ConnectorController extends Controller
                 'is_available' => filled(config('services.telegram.bot_username')),
                 'is_connected' => $request->user()->hasTelegramConnected(),
             ],
+            'mcp' => [
+                'server_url' => route('mcp'),
+                'is_connected' => $request->user()->hasMcpClientConnected(),
+            ],
         ]);
     }
 }
