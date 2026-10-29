@@ -27,6 +27,7 @@ test('oauth clients can only register redirects to trusted domains', function (s
     $isAllowed ? $response->assertSuccessful() : $response->assertStatus(400);
 })->with([
     'claude.ai' => ['https://claude.ai/api/mcp/auth_callback', true],
+    'chatgpt.com' => ['https://chatgpt.com/connector_platform_oauth_redirect', true],
     'localhost' => ['http://localhost:6274/oauth/callback', true],
     'another site' => ['https://evil.example/callback', false],
     'a look-alike host' => ['https://claude.ai.evil.example/callback', false],

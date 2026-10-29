@@ -18,6 +18,7 @@ return [
     'redirect_domains' => [
         'https://claude.ai',
         'https://claude.com',
+        'https://chatgpt.com',
         'http://localhost',
     ],
 

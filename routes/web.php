@@ -52,5 +52,5 @@ Route::middleware('auth')->group(function () {
     Route::post('/telegram/connection', [TelegramConnectionController::class, 'store'])->name('telegram.connection.store');
     Route::delete('/telegram/connection', [TelegramConnectionController::class, 'destroy'])->name('telegram.connection.destroy');
 
-    Route::delete('/mcp/connection', [McpConnectionController::class, 'destroy'])->name('mcp.connection.destroy');
+    Route::delete('/mcp/connection/{mcpClient}', [McpConnectionController::class, 'destroy'])->name('mcp.connection.destroy');
 });

@@ -1,6 +1,8 @@
 import { Link } from '@inertiajs/react';
 import { useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
+    ChatGptLogo,
     CheckIcon,
     ClaudeLogo,
     CopyIcon,
@@ -19,9 +21,11 @@ type ConnectorsProps = {
     };
     mcp: {
         server_url: string;
-        is_connected: boolean;
+        connected_clients: McpClient[];
     };
 };
+
+type McpClient = 'claude' | 'chatgpt';
 
 const secondaryButtonClassName =
     'shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-600 ring-1 ring-black/10 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-300 dark:ring-white/10 dark:hover:bg-neutral-800 dark:hover:text-white';
@@ -47,14 +51,40 @@ function ConnectionStatus({ isConnected }: { isConnected: boolean }) {
     );
 }
 
-/**
- * Prompt the user sends to Claude to get walked through adding the Taskflow MCP connector.
- */
-function connectionPrompt(serverUrl: string): string {
-    return `Quero conectar o Taskflow a você. Me guie, passo a passo, para adicionar um conector personalizado em Configurações → Conectores usando esta URL de servidor MCP: ${serverUrl}. Depois de adicionar, vou entrar no Taskflow e aprovar o acesso.`;
-}
+type McpConnectorDetails = {
+    name: string;
+    logo: ReactNode;
+    logoClassName: string;
+    /**
+     * Prompt the user sends to the assistant to get walked through adding the Taskflow MCP connector.
+     */
+    connectionPrompt: (serverUrl: string) => string;
+};
 
-function CopyablePrompt({ prompt }: { prompt: string }) {
+const mcpConnectors: Record<McpClient, McpConnectorDetails> = {
+    claude: {
+        name: 'Claude',
+        logo: <ClaudeLogo className="size-6" />,
+        logoClassName: 'bg-[#F4F3EE] dark:bg-[#F4F3EE]/10',
+        connectionPrompt: (serverUrl) =>
+            `Quero conectar o Taskflow a você. Me guie, passo a passo, para adicionar um conector personalizado em Configurações → Conectores usando esta URL de servidor MCP: ${serverUrl}. Depois de adicionar, vou entrar no Taskflow e aprovar o acesso.`,
+    },
+    chatgpt: {
+        name: 'ChatGPT',
+        logo: <ChatGptLogo className="size-6" />,
+        logoClassName: 'bg-white text-black dark:bg-white/10 dark:text-white',
+        connectionPrompt: (serverUrl) =>
+            `Quero conectar o Taskflow a você. Me guie, passo a passo, para ativar o modo de desenvolvedor e criar um conector personalizado, com autenticação OAuth, usando esta URL de servidor MCP: ${serverUrl}. Depois de criar, vou entrar no Taskflow e aprovar o acesso.`,
+    },
+};
+
+function CopyablePrompt({
+    prompt,
+    assistantName,
+}: {
+    prompt: string;
+    assistantName: string;
+}) {
     const [isCopied, setIsCopied] = useState(false);
     const promptRef = useRef<HTMLParagraphElement>(null);
 
@@ -71,53 +101,75 @@ function CopyablePrompt({ prompt }: { prompt: string }) {
     };
 
     return (
-        <div className="rounded-lg bg-white p-3 ring-1 ring-black/10 dark:bg-neutral-950 dark:ring-white/10">
-            <p
-                ref={promptRef}
-                className="text-sm break-words text-neutral-700 dark:text-neutral-300"
-            >
-                {prompt}
-            </p>
-            <div className="mt-2 flex justify-end">
+        <div>
+            <div className="flex items-center justify-between gap-4">
+                <p className="text-sm text-neutral-600 dark:text-neutral-300">
+                    Envie este prompt ao {assistantName} para conectar:
+                </p>
                 <button
                     type="button"
                     onClick={copy}
-                    className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
+                    aria-label={isCopied ? 'Prompt copiado' : 'Copiar prompt'}
+                    className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-200/60 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
                 >
                     {isCopied ? (
                         <CheckIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
                         <CopyIcon className="size-3.5" />
                     )}
-                    {isCopied ? 'Copiado' : 'Copiar prompt'}
+                    {isCopied ? 'Copiado' : 'Copiar'}
                 </button>
+            </div>
+            <div className="mt-3 rounded-lg bg-neutral-900 p-4 shadow-sm ring-1 ring-black/10 dark:bg-neutral-950 dark:ring-white/10">
+                <p
+                    ref={promptRef}
+                    className="font-mono text-[13px] leading-relaxed break-words text-neutral-200 selection:bg-white/20"
+                >
+                    {prompt}
+                </p>
             </div>
         </div>
     );
 }
 
-function ClaudeConnector({ mcp }: { mcp: ConnectorsProps['mcp'] }) {
+function McpConnector({
+    client,
+    serverUrl,
+    isConnected,
+}: {
+    client: McpClient;
+    serverUrl: string;
+    isConnected: boolean;
+}) {
+    const { name, logo, logoClassName, connectionPrompt } =
+        mcpConnectors[client];
+
     return (
         <li className="p-5">
             <div className="flex items-center gap-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#F4F3EE] ring-1 ring-black/5 dark:bg-[#F4F3EE]/10 dark:ring-white/10">
-                    <ClaudeLogo className="size-6" />
+                <div
+                    className={cn(
+                        'flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-black/5 dark:ring-white/10',
+                        logoClassName,
+                    )}
+                >
+                    {logo}
                 </div>
                 <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-2 text-sm font-medium text-neutral-900 dark:text-white">
-                        Claude
+                        {name}
                         <span className="rounded-md bg-violet-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-violet-700 ring-1 ring-violet-600/15 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/20">
                             MCP
                         </span>
-                        <ConnectionStatus isConnected={mcp.is_connected} />
+                        <ConnectionStatus isConnected={isConnected} />
                     </p>
                     <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
-                        Peça ao Claude para ver, criar e concluir suas tasks.
+                        Peça ao {name} para ver, criar e concluir suas tasks.
                     </p>
                 </div>
-                {mcp.is_connected && (
+                {isConnected && (
                     <Link
-                        href={mcpConnection.destroy()}
+                        href={mcpConnection.destroy(client)}
                         as="button"
                         className={secondaryButtonClassName}
                     >
@@ -126,16 +178,12 @@ function ClaudeConnector({ mcp }: { mcp: ConnectorsProps['mcp'] }) {
                 )}
             </div>
 
-            {!mcp.is_connected && (
+            {!isConnected && (
                 <div className="mt-4 rounded-lg bg-neutral-50 p-4 sm:ml-14 dark:bg-white/5">
-                    <p className="text-sm text-neutral-600 dark:text-neutral-300">
-                        Envie este prompt ao Claude para conectar:
-                    </p>
-                    <div className="mt-3">
-                        <CopyablePrompt
-                            prompt={connectionPrompt(mcp.server_url)}
-                        />
-                    </div>
+                    <CopyablePrompt
+                        prompt={connectionPrompt(serverUrl)}
+                        assistantName={name}
+                    />
                 </div>
             )}
         </li>
@@ -202,7 +250,18 @@ export default function Connectors({ telegram, mcp }: ConnectorsProps) {
                             </Link>
                         )}
                     </li>
-                    <ClaudeConnector mcp={mcp} />
+                    {(Object.keys(mcpConnectors) as McpClient[]).map(
+                        (client) => (
+                            <McpConnector
+                                key={client}
+                                client={client}
+                                serverUrl={mcp.server_url}
+                                isConnected={mcp.connected_clients.includes(
+                                    client,
+                                )}
+                            />
+                        ),
+                    )}
                 </ul>
             </section>
         </AppLayout>

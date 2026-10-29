@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\McpClient;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,7 +22,10 @@ class ConnectorController extends Controller
             ],
             'mcp' => [
                 'server_url' => route('mcp'),
-                'is_connected' => $request->user()->hasMcpClientConnected(),
+                'connected_clients' => collect(McpClient::cases())
+                    ->filter(fn (McpClient $mcpClient): bool => $request->user()->hasMcpClientConnected($mcpClient))
+                    ->map(fn (McpClient $mcpClient): string => $mcpClient->value)
+                    ->values(),
             ],
         ]);
     }
