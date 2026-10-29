@@ -15,7 +15,7 @@ use Laravel\Passport\Token;
 function issueMcpToken(User $user, McpClient $mcpClient = McpClient::Claude, bool $isRevoked = false, ?CarbonInterface $expiresAt = null): Token
 {
     $client = Client::factory()->create([
-        'redirect_uris' => [$mcpClient->redirectOrigins()[0].'/oauth/callback'],
+        'redirect_uris' => [($mcpClient->redirectOrigins()[0] ?? 'http://localhost:6274').'/oauth/callback'],
     ]);
 
     $token = Token::forceCreate([
@@ -43,6 +43,7 @@ test('the connectors page shows the mcp server url and which clients are connect
     match ($tokenState) {
         'claude' => issueMcpToken($user),
         'chatgpt' => issueMcpToken($user, McpClient::ChatGpt),
+        'local tool' => issueMcpToken($user, McpClient::Other),
         'revoked' => issueMcpToken($user, isRevoked: true),
         'expired' => issueMcpToken($user, expiresAt: now()->subMinute()),
         'another user' => issueMcpToken(User::factory()->create()),
@@ -57,6 +58,7 @@ test('the connectors page shows the mcp server url and which clients are connect
 })->with([
     'with a live claude token' => ['claude', ['claude']],
     'with a live chatgpt token' => ['chatgpt', ['chatgpt']],
+    'with a live token from a local tool' => ['local tool', ['other']],
     'without tokens' => ['none', []],
     'with a revoked token' => ['revoked', []],
     'with an expired token' => ['expired', []],
@@ -84,4 +86,21 @@ test('disconnecting a client revokes only its tokens and leaves other users conn
         ->and($otherUsersToken->fresh()->revoked)->toBeFalse()
         ->and($user->hasMcpClientConnected(McpClient::Claude))->toBeFalse()
         ->and($user->hasMcpClientConnected(McpClient::ChatGpt))->toBeTrue();
+});
+
+test('disconnecting other clients revokes tokens from local tools but not from known assistants', function () {
+    $user = User::factory()->create();
+    $localToolToken = issueMcpToken($user, McpClient::Other);
+    $claudeToken = issueMcpToken($user);
+
+    expect($user->hasMcpClientConnected(McpClient::Other))->toBeTrue();
+
+    $this->actingAs($user)
+        ->from(route('settings.connectors'))
+        ->delete(route('mcp.connection.destroy', McpClient::Other))
+        ->assertRedirect(route('settings.connectors'));
+
+    expect($localToolToken->fresh()->revoked)->toBeTrue()
+        ->and($claudeToken->fresh()->revoked)->toBeFalse()
+        ->and($user->hasMcpClientConnected(McpClient::Other))->toBeFalse();
 });

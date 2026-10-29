@@ -6,6 +6,7 @@ import {
     CheckIcon,
     ClaudeLogo,
     CopyIcon,
+    PlugIcon,
     TelegramLogo,
 } from '@/components/icons';
 import AppLayout from '@/layouts/app-layout';
@@ -25,7 +26,12 @@ type ConnectorsProps = {
     };
 };
 
-type McpClient = 'claude' | 'chatgpt';
+type McpClient = 'claude' | 'chatgpt' | 'other';
+
+/**
+ * The assistants with a dedicated card; any other client is grouped under "Outros clientes MCP".
+ */
+type McpAssistant = Exclude<McpClient, 'other'>;
 
 const secondaryButtonClassName =
     'shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-600 ring-1 ring-black/10 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-300 dark:ring-white/10 dark:hover:bg-neutral-800 dark:hover:text-white';
@@ -61,7 +67,7 @@ type McpConnectorDetails = {
     connectionPrompt: (serverUrl: string) => string;
 };
 
-const mcpConnectors: Record<McpClient, McpConnectorDetails> = {
+const mcpConnectors: Record<McpAssistant, McpConnectorDetails> = {
     claude: {
         name: 'Claude',
         logo: <ClaudeLogo className="size-6" />,
@@ -137,7 +143,7 @@ function McpConnector({
     serverUrl,
     isConnected,
 }: {
-    client: McpClient;
+    client: McpAssistant;
     serverUrl: string;
     isConnected: boolean;
 }) {
@@ -186,6 +192,36 @@ function McpConnector({
                     />
                 </div>
             )}
+        </li>
+    );
+}
+
+/**
+ * Clients outside the known assistants, such as local tools, so their access can still be revoked.
+ */
+function OtherMcpClients() {
+    return (
+        <li className="flex items-center gap-4 p-5">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-neutral-50 text-neutral-600 ring-1 ring-black/5 dark:bg-white/5 dark:text-neutral-300 dark:ring-white/10">
+                <PlugIcon className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 text-sm font-medium text-neutral-900 dark:text-white">
+                    Outros clientes MCP
+                    <ConnectionStatus isConnected />
+                </p>
+                <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+                    Apps locais, como editores e ferramentas de teste, com
+                    acesso às suas tasks.
+                </p>
+            </div>
+            <Link
+                href={mcpConnection.destroy('other')}
+                as="button"
+                className={secondaryButtonClassName}
+            >
+                Desconectar
+            </Link>
         </li>
     );
 }
@@ -250,7 +286,7 @@ export default function Connectors({ telegram, mcp }: ConnectorsProps) {
                             </Link>
                         )}
                     </li>
-                    {(Object.keys(mcpConnectors) as McpClient[]).map(
+                    {(Object.keys(mcpConnectors) as McpAssistant[]).map(
                         (client) => (
                             <McpConnector
                                 key={client}
@@ -261,6 +297,9 @@ export default function Connectors({ telegram, mcp }: ConnectorsProps) {
                                 )}
                             />
                         ),
+                    )}
+                    {mcp.connected_clients.includes('other') && (
+                        <OtherMcpClients />
                     )}
                 </ul>
             </section>

@@ -90,7 +90,7 @@ class User extends Authenticatable implements OAuthenticatable
             ->with(['client', 'refreshToken'])
             ->where('revoked', false)
             ->get()
-            ->filter(fn (Token $token): bool => $token->client !== null && $mcpClient->registered($token->client));
+            ->filter(fn (Token $token): bool => $mcpClient->registered($token->client));
     }
 
     /**

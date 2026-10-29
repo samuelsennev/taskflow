@@ -10,6 +10,11 @@ enum McpClient: string
     case ChatGpt = 'chatgpt';
 
     /**
+     * Any client that isn't a known app, such as local tools redirecting to localhost.
+     */
+    case Other = 'other';
+
+    /**
      * The origins this app redirects to after the user approves OAuth access.
      *
      * @return list<string>
@@ -19,15 +24,23 @@ enum McpClient: string
         return match ($this) {
             self::Claude => ['https://claude.ai', 'https://claude.com'],
             self::ChatGpt => ['https://chatgpt.com'],
+            self::Other => [],
         };
     }
 
     /**
-     * Determine if the OAuth client was registered by this app, judging by its redirect URIs.
+     * Determine if the OAuth client belongs to this app, judging by its redirect URIs.
+     *
+     * Every client matches exactly one case, so no token is left out of the
+     * connectors page or beyond the reach of revocation.
      */
-    public function registered(Client $client): bool
+    public function registered(?Client $client): bool
     {
-        return collect($client->redirect_uris)->contains(function (string $redirectUri): bool {
+        if ($this === self::Other) {
+            return ! self::Claude->registered($client) && ! self::ChatGpt->registered($client);
+        }
+
+        return collect($client?->redirect_uris)->contains(function (string $redirectUri): bool {
             $scheme = parse_url($redirectUri, PHP_URL_SCHEME);
             $host = parse_url($redirectUri, PHP_URL_HOST);
 
