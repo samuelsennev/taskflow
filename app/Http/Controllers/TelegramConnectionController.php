@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use App\Services\Telegram\TelegramUpdateHandler;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -19,9 +17,7 @@ class TelegramConnectionController extends Controller
     {
         abort_if(blank(config('services.telegram.bot_username')), 503, 'O bot do Telegram não está configurado.');
 
-        $token = Str::random(32);
-
-        Cache::put(TelegramUpdateHandler::linkCacheKey($token), $request->user()->id, now()->addMinutes(15));
+        $token = TelegramUpdateHandler::issueLinkToken($request->user());
 
         return Inertia::location('https://t.me/'.config('services.telegram.bot_username').'?start='.$token);
     }

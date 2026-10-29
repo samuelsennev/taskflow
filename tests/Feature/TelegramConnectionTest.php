@@ -24,6 +24,16 @@ test('users are sent to the bot with a one-time link token', function () {
     Str::createRandomStringsNormally();
 });
 
+test('a new link token replaces the one issued before', function () {
+    config(['services.telegram.bot_username' => 'TaskflowBot']);
+    $user = User::factory()->create();
+    $firstToken = TelegramUpdateHandler::issueLinkToken($user);
+
+    $this->actingAs($user)->post(route('telegram.connection.store'), [], ['X-Inertia' => 'true']);
+
+    expect(Cache::has(TelegramUpdateHandler::linkCacheKey($firstToken)))->toBeFalse();
+});
+
 test('connecting fails clearly when the bot username is not configured', function () {
     config(['services.telegram.bot_username' => null]);
 

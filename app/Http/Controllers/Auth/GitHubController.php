@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\Telegram\TelegramUpdateHandler;
 use GuzzleHttp\Exception\ClientException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,7 +45,13 @@ class GitHubController extends Controller
             return $this->failed('Sua conta do GitHub não tem um e-mail verificado.');
         }
 
-        Auth::login($this->findOrCreateUser($gitHubUser), remember: true);
+        $user = $this->findOrCreateUser($gitHubUser);
+
+        if ($user === null) {
+            return $this->failed('Já existe uma conta com este e-mail ligada a outra conta do GitHub.');
+        }
+
+        Auth::login($user, remember: true);
 
         $request->session()->regenerate();
 
@@ -53,8 +60,10 @@ class GitHubController extends Controller
 
     /**
      * Find the user linked to the GitHub account, link an existing user with the same email, or create a new one.
+     *
+     * Returns null when the email belongs to an account already linked to a different GitHub account.
      */
-    protected function findOrCreateUser(SocialiteUser $gitHubUser): User
+    protected function findOrCreateUser(SocialiteUser $gitHubUser): ?User
     {
         $user = User::firstWhere('github_id', $gitHubUser->getId())
             ?? User::firstWhere('email', $gitHubUser->getEmail())
@@ -62,6 +71,10 @@ class GitHubController extends Controller
                 'name' => $gitHubUser->getName() ?: $gitHubUser->getNickname(),
                 'email' => $gitHubUser->getEmail(),
             ]);
+
+        if ($user->github_id !== null && $user->github_id !== (string) $gitHubUser->getId()) {
+            return null;
+        }
 
         if ($user->exists && $user->github_id === null && $user->email_verified_at === null) {
             $this->revokeExistingAccess($user);
@@ -78,7 +91,8 @@ class GitHubController extends Controller
      * Lock out whoever registered an unverified account before GitHub proved who owns its email.
      *
      * Anyone can sign up with someone else's address, so the password, "remember me" token,
-     * open sessions and linked Telegram chat of such an account may belong to someone else.
+     * open sessions, linked Telegram chat and pending Telegram link token of such an account
+     * may belong to someone else.
      */
     protected function revokeExistingAccess(User $user): void
     {
@@ -87,6 +101,8 @@ class GitHubController extends Controller
             'remember_token' => null,
             'telegram_chat_id' => null,
         ]);
+
+        TelegramUpdateHandler::revokeLinkToken($user);
 
         if (config('session.driver') === 'database') {
             DB::connection(config('session.connection'))

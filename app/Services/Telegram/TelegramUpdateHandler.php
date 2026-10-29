@@ -40,6 +40,40 @@ class TelegramUpdateHandler
     }
 
     /**
+     * Issue a one-time token that links the next chat to start the bot with it to the user,
+     * replacing any token the user was issued before.
+     */
+    public static function issueLinkToken(User $user): string
+    {
+        self::revokeLinkToken($user);
+
+        $token = Str::random(32);
+        $expiresAt = now()->addMinutes(15);
+
+        Cache::put(self::linkCacheKey($token), $user->id, $expiresAt);
+        Cache::put(self::pendingLinkCacheKey($user), $token, $expiresAt);
+
+        return $token;
+    }
+
+    /**
+     * Invalidate the user's unused link token, if any.
+     */
+    public static function revokeLinkToken(User $user): void
+    {
+        $token = Cache::pull(self::pendingLinkCacheKey($user));
+
+        if (is_string($token)) {
+            Cache::forget(self::linkCacheKey($token));
+        }
+    }
+
+    private static function pendingLinkCacheKey(User $user): string
+    {
+        return "telegram:pending-link:{$user->id}";
+    }
+
+    /**
      * Handle a single update from the Telegram Bot API.
      *
      * @param  array<string, mixed>  $update

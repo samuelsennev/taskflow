@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\User;
+use App\Services\Telegram\TelegramUpdateHandler;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Laravel\Socialite\Socialite;
 use Laravel\Socialite\Two\User as GitHubUser;
@@ -99,6 +101,38 @@ test('linking github to an unverified account locks out whoever registered it', 
     $this->post(route('login.store'), ['email' => 'ada@example.com', 'password' => 'password'])
         ->assertSessionHasErrors('email');
     $this->assertGuest();
+});
+
+test('a telegram link token issued before github claims an unverified account stops working', function () {
+    $user = User::factory()->unverified()->create(['email' => 'ada@example.com']);
+    $token = TelegramUpdateHandler::issueLinkToken($user);
+
+    Socialite::fake('github', GitHubUser::fake([
+        'id' => 'github-123',
+        'name' => 'Ada Lovelace',
+        'email' => 'ada@example.com',
+    ]));
+
+    $this->get(route('auth.github.callback'));
+
+    expect(Cache::has(TelegramUpdateHandler::linkCacheKey($token)))->toBeFalse();
+});
+
+test('github is not linked to an account already linked to another github account', function () {
+    $user = User::factory()->create(['email' => 'ada@example.com', 'github_id' => 'github-original']);
+
+    Socialite::fake('github', GitHubUser::fake([
+        'id' => 'github-other',
+        'name' => 'Someone Else',
+        'email' => 'ada@example.com',
+    ]));
+
+    $this->get(route('auth.github.callback'))
+        ->assertRedirect(route('login'))
+        ->assertSessionHasErrors('github');
+
+    $this->assertGuest();
+    expect($user->fresh()->github_id)->toBe('github-original');
 });
 
 test('the nickname is used when the github account has no name', function () {
