@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Laravel\Socialite\Socialite;
 use Laravel\Socialite\Two\User as GitHubUser;
 
@@ -58,8 +59,46 @@ test('github is linked to an existing account with the same email', function () 
     $this->get(route('auth.github.callback'))->assertRedirect(route('dashboard'));
 
     $this->assertAuthenticatedAs($user);
-    expect($user->fresh()->github_id)->toBe('github-123')
+    expect($user->fresh())
+        ->github_id->toBe('github-123')
+        ->password->not->toBeNull()
         ->and(User::count())->toBe(1);
+});
+
+test('linking github to an unverified account locks out whoever registered it', function () {
+    config(['session.driver' => 'database']);
+    $user = User::factory()->unverified()->create([
+        'email' => 'ada@example.com',
+        'remember_token' => 'attacker-remember-token',
+        'telegram_chat_id' => 12345,
+    ]);
+    DB::table('sessions')->insert([
+        'id' => 'attacker-session',
+        'user_id' => $user->id,
+        'payload' => '',
+        'last_activity' => now()->getTimestamp(),
+    ]);
+
+    Socialite::fake('github', GitHubUser::fake([
+        'id' => 'github-123',
+        'name' => 'Ada Lovelace',
+        'email' => 'ada@example.com',
+    ]));
+
+    $this->get(route('auth.github.callback'))->assertRedirect(route('dashboard'));
+
+    $this->assertAuthenticatedAs($user);
+    expect($user->fresh())
+        ->password->toBeNull()
+        ->remember_token->not->toBe('attacker-remember-token')
+        ->telegram_chat_id->toBeNull()
+        ->email_verified_at->not->toBeNull()
+        ->and(DB::table('sessions')->where('id', 'attacker-session')->exists())->toBeFalse();
+
+    $this->post(route('logout'));
+    $this->post(route('login.store'), ['email' => 'ada@example.com', 'password' => 'password'])
+        ->assertSessionHasErrors('email');
+    $this->assertGuest();
 });
 
 test('the nickname is used when the github account has no name', function () {

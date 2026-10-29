@@ -8,6 +8,7 @@ use GuzzleHttp\Exception\ClientException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Laravel\Fortify\Fortify;
 use Laravel\Socialite\Contracts\User as SocialiteUser;
 use Laravel\Socialite\Socialite;
@@ -62,11 +63,37 @@ class GitHubController extends Controller
                 'email' => $gitHubUser->getEmail(),
             ]);
 
+        if ($user->exists && $user->github_id === null && $user->email_verified_at === null) {
+            $this->revokeExistingAccess($user);
+        }
+
         $user->github_id = (string) $gitHubUser->getId();
         $user->email_verified_at ??= now();
         $user->save();
 
         return $user;
+    }
+
+    /**
+     * Lock out whoever registered an unverified account before GitHub proved who owns its email.
+     *
+     * Anyone can sign up with someone else's address, so the password, "remember me" token,
+     * open sessions and linked Telegram chat of such an account may belong to someone else.
+     */
+    protected function revokeExistingAccess(User $user): void
+    {
+        $user->forceFill([
+            'password' => null,
+            'remember_token' => null,
+            'telegram_chat_id' => null,
+        ]);
+
+        if (config('session.driver') === 'database') {
+            DB::connection(config('session.connection'))
+                ->table(config('session.table'))
+                ->where('user_id', $user->id)
+                ->delete();
+        }
     }
 
     /**
